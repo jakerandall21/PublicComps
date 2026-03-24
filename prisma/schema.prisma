@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id            Int      @id @default(autoincrement())
+  ticker        String   @unique
+  name          String
+  exchange      String?
+  sector        String?
+  subSector     String?
+  meritechLabel String?
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  metricValues       MetricValue[]
+  sectionMemberships SectionMembership[]
+
+  @@index([ticker])
+  @@index([sector])
+}
+
+model MetricCatalog {
+  id          Int     @id @default(autoincrement())
+  metricKey   String  @unique
+  family      String
+  displayName String
+  unit        String  // currency, percent, multiple, count, ratio
+  periodicity String  // point_in_time, fiscal_year, rolling, derived
+
+  metricValues MetricValue[]
+
+  @@index([family])
+}
+
+model MetricValue {
+  id            Int      @id @default(autoincrement())
+  companyId     Int
+  metricKey     String
+  periodKey     String   // CY2024A, CY2025E, NTM, LTM, etc.
+  numericValue  Float?
+  rawExcelError String?
+  asOfDate      DateTime
+  ingestionId   Int?
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  metric        MetricCatalog @relation(fields: [metricKey], references: [metricKey], onDelete: Cascade)
+
+  @@unique([companyId, metricKey, periodKey, asOfDate])
+  @@index([companyId])
+  @@index([metricKey])
+  @@index([periodKey])
+  @@index([asOfDate])
+}
+
+model Section {
+  id          Int     @id @default(autoincrement())
+  sectionKey  String  @unique
+  displayName String
+  description String?
+  sortOrder   Int     @default(0)
+
+  memberships SectionMembership[]
+}
+
+model SectionMembership {
+  id        Int  @id @default(autoincrement())
+  companyId Int
+  sectionId Int
+  sortOrder Int  @default(0)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, sectionId])
+  @@index([sectionId])
+}
+
+model HistoricalSnapshot {
+  id            Int      @id @default(autoincrement())
+  snapshotDate  DateTime
+  summaryFamily String   // e.g., "ev_ntm_revenue_by_cohort", "portfolio_value"
+  seriesKey     String   // e.g., "hyper_growth", "high_growth", "total_value"
+  value         Float
+  createdAt     DateTime @default(now())
+
+  @@unique([snapshotDate, summaryFamily, seriesKey])
+  @@index([summaryFamily])
+  @@index([snapshotDate])
+}
+
+model IngestionLog {
+  id        Int      @id @default(autoincrement())
+  runId     String   @unique @default(cuid())
+  startedAt DateTime @default(now())
+  asOfDate  DateTime
+  rowCount  Int      @default(0)
+  status    String   @default("pending") // pending, running, completed, failed
+  errorMsg  String?
+}
